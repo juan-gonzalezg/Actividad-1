@@ -1,32 +1,11 @@
 /**
- * LÓGICA DEL JUEGO SOLITARIO 2048 - VERSIÓN TAILWIND CSS
+ * LÓGICA DEL JUEGO SOLITARIO 2048 - VERSIÓN TAILWIND CSS (ARCHIVO EXTERNO)
  */
 
-// Configuraciones
+// Configuraciones del juego
 const MAX_CARDS_PER_COLUMN = 8;
 const INITIAL_DECK_VALUES = [2, 4, 8, 16, 32];
 const CHAIN_DELAY = 250; 
-
-// Diccionario de estilos de cartas usando clases utilitarias de Tailwind
-const TAILWIND_CARD_STYLES = {
-    2: "bg-[#64748B]",
-    4: "bg-[#475569]",
-    8: "bg-[#3B82F6] shadow-[0_0_15px_rgba(59,130,246,0.4)]",
-    16: "bg-[#6366F1] shadow-[0_0_20px_rgba(99,102,241,0.5)]",
-    32: "bg-[#8B5CF6] shadow-[0_0_25px_rgba(139,92,246,0.6)]",
-    64: "bg-[#EC4899] shadow-[0_0_30px_rgba(236,72,153,0.7)]",
-    128: "bg-[#D946EF] shadow-[0_0_35px_rgba(217,70,239,0.8)]",
-    256: "bg-[#EF4444] shadow-[0_0_40px_rgba(239,68,68,0.9)]",
-    512: "bg-[#F97316] shadow-[0_0_45px_rgba(249,115,22,1)]",
-    1024: "bg-[#EAB308] shadow-[0_0_50px_rgba(234,179,8,1)] text-[#422006]",
-    2048: "bg-[#10B981] shadow-[0_0_60px_rgba(16,185,129,1)] text-[#022C22]"
-};
-
-const BASE_CARD_CLASSES = [
-    "w-full", "aspect-[1/1.3]", "max-w-[80px]", "min-h-[60px]", "rounded-lg", 
-    "flex", "justify-center", "items-center", "font-montserrat", "font-black", 
-    "text-white", "shadow-[inset_0_0_10px_rgba(0,0,0,0.5)]", "transition-transform", "duration-100"
-];
 
 // Estado del Juego
 let columns = [[], [], [], []];
@@ -34,31 +13,35 @@ let currentCardValue = 0;
 let score = 0;
 let isProcessing = false;
 
-// Referencias DOM
-const scoreEl = document.getElementById('score');
-const deckContainer = document.getElementById('deck-card-container');
-const modal = document.getElementById('gameOverModal');
-const modalContent = document.getElementById('modalContent');
-const finalScoreEl = document.getElementById('finalScore');
+// Variables de DOM (se cargan al inicializar el juego)
+let DOM = {};
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 function initGame() {
+    // 1. Asignar variables DOM de forma segura (el HTML ya cargó)
+    DOM.scoreEl = document.getElementById('score');
+    DOM.deckContainer = document.getElementById('deck-card-container');
+    DOM.modal = document.getElementById('gameOverModal');
+    DOM.modalContent = document.getElementById('modalContent');
+    DOM.finalScoreEl = document.getElementById('finalScore');
+
+    // 2. Reiniciar estados
     columns = [[], [], [], []];
     score = 0;
     isProcessing = false;
+    DOM.scoreEl.textContent = score;
     
-    scoreEl.textContent = score;
+    // 3. Ocultar modal usando clases de Tailwind
+    DOM.modal.classList.remove('opacity-100', 'pointer-events-auto');
+    DOM.modal.classList.add('opacity-0', 'pointer-events-none');
+    DOM.modalContent.classList.remove('scale-100');
+    DOM.modalContent.classList.add('scale-75');
     
-    // Ocultar modal Tailwind
-    modal.classList.remove('opacity-100', 'pointer-events-auto');
-    modal.classList.add('opacity-0', 'pointer-events-none');
-    modalContent.classList.remove('scale-100');
-    modalContent.classList.add('scale-75');
-    
-    // Limpiar columnas
+    // 4. Limpiar las columnas del tablero
     for(let i=0; i<4; i++) {
-        document.getElementById(`col-content-${i}`).innerHTML = '';
+        const colContent = document.getElementById(`col-content-${i}`);
+        if(colContent) colContent.innerHTML = '';
         toggleDangerLine(i, false);
     }
     
@@ -71,9 +54,11 @@ function generateNextCard() {
     renderDeckCard();
 }
 
-// Crea el DOM de la carta inyectando utilidades Tailwind
+// Crea el DOM de la carta inyectando utilidades Tailwind (lee los arrays que dejamos en el HTML)
 function createCardDOM(value) {
     const card = document.createElement('div');
+    
+    // BASE_CARD_CLASSES y TAILWIND_CARD_STYLES son leídos del archivo HTML
     card.classList.add(...BASE_CARD_CLASSES);
     
     // Ajustar tamaño del texto si el número es muy grande
@@ -90,12 +75,15 @@ function createCardDOM(value) {
 }
 
 function renderDeckCard() {
-    deckContainer.innerHTML = '';
-    deckContainer.appendChild(createCardDOM(currentCardValue));
+    if(!DOM.deckContainer) return;
+    DOM.deckContainer.innerHTML = '';
+    DOM.deckContainer.appendChild(createCardDOM(currentCardValue));
 }
 
 function toggleDangerLine(colIndex, isDanger) {
     const line = document.getElementById(`danger-line-${colIndex}`);
+    if(!line) return;
+
     if(isDanger) {
         line.classList.replace('opacity-30', 'opacity-100');
         line.classList.add('shadow-[0_0_10px_#EF4444]');
@@ -107,10 +95,12 @@ function toggleDangerLine(colIndex, isDanger) {
 
 function renderColumn(colIndex, animateTopPop = false) {
     const colContainer = document.getElementById(`col-content-${colIndex}`);
+    if(!colContainer) return;
+    
     colContainer.innerHTML = ''; 
     const colData = columns[colIndex];
 
-    // Toggle Tailwind Danger Classes
+    // Mostrar/ocultar línea roja
     toggleDangerLine(colIndex, colData.length >= MAX_CARDS_PER_COLUMN - 1);
 
     colData.forEach((val, index) => {
@@ -125,27 +115,26 @@ function renderColumn(colIndex, animateTopPop = false) {
 async function handleColumnClick(colIndex) {
     if (isProcessing) return;
 
-    if (columns[colIndex].length >= MAX_CARDS_PER_COLUMN && 
-        columns[colIndex][columns[colIndex].length - 1] !== currentCardValue) {
-        // Va a perder, dejamos continuar visualmente para feedback
-    }
-
     isProcessing = true;
     const droppedValue = currentCardValue;
     
+    // 1. Animar la caída desde el mazo
     await animateCardDrop(colIndex, droppedValue);
 
+    // 2. Agregar a lógica y pantalla
     columns[colIndex].push(droppedValue);
     renderColumn(colIndex);
     
     const colContainer = document.getElementById(`col-content-${colIndex}`);
     const topCardDOM = colContainer.lastElementChild;
     if (topCardDOM && columns[colIndex].length > 1) {
-        topCardDOM.classList.add('animate-impact');
+        topCardDOM.classList.add('animate-impact'); // Golpe al caer
     }
 
+    // 3. Procesar combos/fusiones
     await processMerges(colIndex);
 
+    // 4. Verificar Derrota
     if (columns[colIndex].length > MAX_CARDS_PER_COLUMN) {
         triggerGameOver();
         return;
@@ -156,16 +145,16 @@ async function handleColumnClick(colIndex) {
 }
 
 // Animación dinámica de caída. 
-// Nota: Los transforms(x,y) exactos se hacen inline porque Tailwind no puede adivinar coordenadas dinámicas en tiempo real.
 function animateCardDrop(colIndex, value) {
     return new Promise(resolve => {
-        const deckRect = deckContainer.getBoundingClientRect();
+        const deckRect = DOM.deckContainer.getBoundingClientRect();
         const colZone = document.querySelectorAll('.col-zone')[colIndex];
         const colContainer = document.getElementById(`col-content-${colIndex}`);
         
         const topCardDOM = colContainer.lastElementChild;
         let targetY;
         
+        // Calcular hacia dónde tiene que bajar la carta
         if (topCardDOM) {
             const topRect = topCardDOM.getBoundingClientRect();
             targetY = topRect.top - deckRect.height - 8;
@@ -178,7 +167,7 @@ function animateCardDrop(colIndex, value) {
 
         const transitCard = createCardDOM(value);
         
-        // Clases Tailwind para la carta en tránsito
+        // Clases de Tailwind para la carta voladora
         transitCard.classList.add('fixed', 'z-[100]', 'pointer-events-none', 'transition-transform', 'duration-[250ms]', 'ease-[cubic-bezier(0.5,0,1,1)]');
         
         transitCard.style.left = `${deckRect.left}px`;
@@ -187,9 +176,9 @@ function animateCardDrop(colIndex, value) {
         transitCard.style.height = `${deckRect.height}px`;
         
         document.body.appendChild(transitCard);
-        deckContainer.innerHTML = '';
+        DOM.deckContainer.innerHTML = '';
 
-        transitCard.offsetHeight; // Reflow
+        transitCard.offsetHeight; // Forzar al navegador a registrar la posición antes de moverla
 
         transitCard.style.transform = `translate(${targetX - deckRect.left}px, ${targetY - deckRect.top}px)`;
 
@@ -207,6 +196,7 @@ async function processMerges(colIndex) {
         let top = col[col.length - 1];
         let below = col[col.length - 2];
 
+        // Si son iguales, se fusionan
         if (top === below) {
             await sleep(CHAIN_DELAY);
     
@@ -216,17 +206,17 @@ async function processMerges(colIndex) {
             col.push(newValue);
     
             score += newValue;
-            scoreEl.textContent = score;
+            DOM.scoreEl.textContent = score;
 
-            renderColumn(colIndex, true);
+            renderColumn(colIndex, true); // true = activa animación POP
 
+            // Especial: Si llega a 2048, limpia la columna completa
             if (newValue === 2048) {
                 await sleep(400); 
 
                 const colContainer = document.getElementById(`col-content-${colIndex}`);
                 const cardDOM = colContainer.lastElementChild;
-                // Usar animación configurada en Tailwind
-                cardDOM.classList.add('animate-clear2048');
+                cardDOM.classList.add('animate-clear2048'); // Animación desvanecimiento
 
                 await sleep(600); 
 
@@ -235,21 +225,20 @@ async function processMerges(colIndex) {
                 break; 
             }
         } else {
-            break;
+            break; // No hay más fusiones
         }
     }
 }
 
 function triggerGameOver() {
     isProcessing = true;
-    finalScoreEl.textContent = score;
+    DOM.finalScoreEl.textContent = score;
     
-    // Mostrar modal Tailwind
-    modal.classList.remove('opacity-0', 'pointer-events-none');
-    modal.classList.add('opacity-100', 'pointer-events-auto');
-    modalContent.classList.remove('scale-75');
-    modalContent.classList.add('scale-100');
+    DOM.modal.classList.remove('opacity-0', 'pointer-events-none');
+    DOM.modal.classList.add('opacity-100', 'pointer-events-auto');
+    DOM.modalContent.classList.remove('scale-75');
+    DOM.modalContent.classList.add('scale-100');
 }
 
-// Arranque
+// Arrancar el juego únicamente cuando la página haya cargado por completo
 window.onload = initGame;
