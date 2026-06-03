@@ -1,244 +1,237 @@
-/**
- * LÓGICA DEL JUEGO SOLITARIO 2048 - VERSIÓN TAILWIND CSS (ARCHIVO EXTERNO)
- */
+const MAX_CARDS_PER_COL = 8;
+const TARGET_SCORE = 2048;
 
-// Configuraciones del juego
-const MAX_CARDS_PER_COLUMN = 8;
-const INITIAL_DECK_VALUES = [2, 4, 8, 16, 32];
-const CHAIN_DELAY = 250; 
+// --- NUEVO: Mapeo a los nombres de los archivos de imagen proporcionados ---
+const CARD_IMAGES = {
+    2: 'cartas/carta1.png',
+    4: 'cartas/carta2.png',
+    8: 'cartas/carta3.png',
+    16: 'cartas/carta4.png',
+    32: 'cartas/carta5.png',
+    64: 'cartas/carta6.png',
+    128: 'cartas/carta7.png',
+    256: 'cartas/carta8.png',
+    512: 'cartas/carta9.png',
+    1024: 'cartas/carta10.png',
+    2048: 'cartas/carta11.png'
+};
 
-// Estado del Juego
 let columns = [[], [], [], []];
-let currentCardValue = 0;
+let currentCardValue = null;
 let score = 0;
-let isProcessing = false;
+let isGameOver = false;
+let isAnimating = false; // Bloquea interacciones durante cascadas
 
-// Variables de DOM (se cargan al inicializar el juego)
-let DOM = {};
-
-const sleep = ms => new Promise(r => setTimeout(r, ms));
+// Utilidad para crear pausas asíncronas
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 function initGame() {
-    // 1. Asignar variables DOM de forma segura (el HTML ya cargó)
-    DOM.scoreEl = document.getElementById('score');
-    DOM.deckContainer = document.getElementById('deck-card-container');
-    DOM.modal = document.getElementById('gameOverModal');
-    DOM.modalContent = document.getElementById('modalContent');
-    DOM.finalScoreEl = document.getElementById('finalScore');
-
-    // 2. Reiniciar estados
     columns = [[], [], [], []];
     score = 0;
-    isProcessing = false;
-    DOM.scoreEl.textContent = score;
-    
-    // 3. Ocultar modal usando clases de Tailwind
-    DOM.modal.classList.remove('opacity-100', 'pointer-events-auto');
-    DOM.modal.classList.add('opacity-0', 'pointer-events-none');
-    DOM.modalContent.classList.remove('scale-100');
-    DOM.modalContent.classList.add('scale-75');
-    
-    // 4. Limpiar las columnas del tablero
-    for(let i=0; i<4; i++) {
-        const colContent = document.getElementById(`col-content-${i}`);
-        if(colContent) colContent.innerHTML = '';
-        toggleDangerLine(i, false);
-    }
-    
-    generateNextCard();
+    isGameOver = false;
+    isAnimating = false;
+    document.getElementById('gameOverModal').classList.add('hidden');
+    document.getElementById('gameOverModal').classList.remove('flex');
+    generateNewCard();
+    render();
 }
 
-function generateNextCard() {
-    const randomIndex = Math.floor(Math.random() * INITIAL_DECK_VALUES.length);
-    currentCardValue = INITIAL_DECK_VALUES[randomIndex];
-    renderDeckCard();
+function generateNewCard() {
+    const random = Math.random();
+    if (random < 0.5) currentCardValue = 2;
+    else if (random < 0.8) currentCardValue = 4;
+    else if (random < 0.95) currentCardValue = 8;
+    else if (random < 0.99) currentCardValue = 16;
+    else currentCardValue = 32;
 }
 
-// Crea el DOM de la carta inyectando utilidades Tailwind (lee los arrays que dejamos en el HTML)
-function createCardDOM(value) {
-    const card = document.createElement('div');
-    
-    // BASE_CARD_CLASSES y TAILWIND_CARD_STYLES son leídos del archivo HTML
-    card.classList.add(...BASE_CARD_CLASSES);
-    
-    // Ajustar tamaño del texto si el número es muy grande
-    if (value < 100) card.classList.add('text-2xl');
-    else if (value >= 100 && value < 1000) card.classList.add('text-xl');
-    else if (value >= 1000) card.classList.add('text-lg');
-
-    // Añadir color y sombra específica de Tailwind
-    const styles = TAILWIND_CARD_STYLES[value] || TAILWIND_CARD_STYLES[2048];
-    card.classList.add(...styles.split(' '));
-    
-    card.textContent = value;
-    return card;
-}
-
-function renderDeckCard() {
-    if(!DOM.deckContainer) return;
-    DOM.deckContainer.innerHTML = '';
-    DOM.deckContainer.appendChild(createCardDOM(currentCardValue));
-}
-
-function toggleDangerLine(colIndex, isDanger) {
-    const line = document.getElementById(`danger-line-${colIndex}`);
-    if(!line) return;
-
-    if(isDanger) {
-        line.classList.replace('opacity-30', 'opacity-100');
-        line.classList.add('shadow-[0_0_10px_#EF4444]');
-    } else {
-        line.classList.replace('opacity-100', 'opacity-30');
-        line.classList.remove('shadow-[0_0_10px_#EF4444]');
-    }
-}
-
-function renderColumn(colIndex, animateTopPop = false) {
-    const colContainer = document.getElementById(`col-content-${colIndex}`);
-    if(!colContainer) return;
-    
-    colContainer.innerHTML = ''; 
-    const colData = columns[colIndex];
-
-    // Mostrar/ocultar línea roja
-    toggleDangerLine(colIndex, colData.length >= MAX_CARDS_PER_COLUMN - 1);
-
-    colData.forEach((val, index) => {
-        const card = createCardDOM(val);
-        if (animateTopPop && index === colData.length - 1) {
-            card.classList.add('animate-pop');
-        }
-        colContainer.appendChild(card);
-    });
-}
-
+// Lógica Asíncrona Principal
 async function handleColumnClick(colIndex) {
-    if (isProcessing) return;
+    if (isGameOver || isAnimating) return;
 
-    isProcessing = true;
-    const droppedValue = currentCardValue;
-    
-    // 1. Animar la caída desde el mazo
-    await animateCardDrop(colIndex, droppedValue);
+    const col = columns[colIndex];
 
-    // 2. Agregar a lógica y pantalla
-    columns[colIndex].push(droppedValue);
-    renderColumn(colIndex);
-    
-    const colContainer = document.getElementById(`col-content-${colIndex}`);
-    const topCardDOM = colContainer.lastElementChild;
-    if (topCardDOM && columns[colIndex].length > 1) {
-        topCardDOM.classList.add('animate-impact'); // Golpe al caer
+    // Validación de columna llena
+    if (col.length >= MAX_CARDS_PER_COL && col[col.length - 1].value !== currentCardValue) {
+        const colDOM = document.getElementById(`col-${colIndex}`);
+        colDOM.classList.add('bg-red-500/30');
+        setTimeout(() => colDOM.classList.remove('bg-red-500/30'), 200);
+        return; 
     }
 
-    // 3. Procesar combos/fusiones
-    await processMerges(colIndex);
+    // Bloquear clics mientras se anima la cascada
+    isAnimating = true;
+    document.getElementById('interactionBlocker').classList.remove('hidden');
 
-    // 4. Verificar Derrota
-    if (columns[colIndex].length > MAX_CARDS_PER_COLUMN) {
-        triggerGameOver();
-        return;
+    // 1. Caída de la carta
+    col.push({ value: currentCardValue, state: 'drop' });
+    render();
+    
+    // Esperar a que la animación de caída termine antes de chequear fusiones
+    await sleep(250); 
+
+    // 2. Procesar Fusiones en cascada
+    await processMergesAsync(colIndex);
+
+    // 3. Finalizar turno
+    if (!isGameOver) {
+        generateNewCard();
+        render(); // Renderiza la nueva carta en el mazo
+        checkGameOver();
     }
 
-    generateNextCard();
-    isProcessing = false;
+    isAnimating = false;
+    document.getElementById('interactionBlocker').classList.add('hidden');
 }
 
-// Animación dinámica de caída. 
-function animateCardDrop(colIndex, value) {
-    return new Promise(resolve => {
-        const deckRect = DOM.deckContainer.getBoundingClientRect();
-        const colZone = document.querySelectorAll('.col-zone')[colIndex];
-        const colContainer = document.getElementById(`col-content-${colIndex}`);
-        
-        const topCardDOM = colContainer.lastElementChild;
-        let targetY;
-        
-        // Calcular hacia dónde tiene que bajar la carta
-        if (topCardDOM) {
-            const topRect = topCardDOM.getBoundingClientRect();
-            targetY = topRect.top - deckRect.height - 8;
-        } else {
-            const colRect = colZone.getBoundingClientRect();
-            targetY = colRect.bottom - deckRect.height - 16;
-        }
-
-        const targetX = colZone.getBoundingClientRect().left + (colZone.clientWidth / 2) - (deckRect.width / 2);
-
-        const transitCard = createCardDOM(value);
-        
-        // Clases de Tailwind para la carta voladora
-        transitCard.classList.add('fixed', 'z-[100]', 'pointer-events-none', 'transition-transform', 'duration-[250ms]', 'ease-[cubic-bezier(0.5,0,1,1)]');
-        
-        transitCard.style.left = `${deckRect.left}px`;
-        transitCard.style.top = `${deckRect.top}px`;
-        transitCard.style.width = `${deckRect.width}px`;
-        transitCard.style.height = `${deckRect.height}px`;
-        
-        document.body.appendChild(transitCard);
-        DOM.deckContainer.innerHTML = '';
-
-        transitCard.offsetHeight; // Forzar al navegador a registrar la posición antes de moverla
-
-        transitCard.style.transform = `translate(${targetX - deckRect.left}px, ${targetY - deckRect.top}px)`;
-
-        transitCard.addEventListener('transitionend', () => {
-            transitCard.remove();
-            resolve();
-        }, { once: true });
-    });
-}
-
-async function processMerges(colIndex) {
+async function processMergesAsync(colIndex) {
     let col = columns[colIndex];
-    
-    while (col.length >= 2) {
-        let top = col[col.length - 1];
-        let below = col[col.length - 2];
+    let merged = true;
 
-        // Si son iguales, se fusionan
-        if (top === below) {
-            await sleep(CHAIN_DELAY);
-    
-            col.pop();
-            col.pop();
-            let newValue = top * 2;
-            col.push(newValue);
-    
+    while (merged && col.length >= 2) {
+        merged = false;
+        const top1 = col[col.length - 1];
+        const top2 = col[col.length - 2];
+
+        if (top1.value === top2.value) {
+            // Animación de choque (Squash) antes de fusionarse
+            top1.state = 'squash';
+            top2.state = 'squash';
+            render();
+            await sleep(150);
+
+            // Realizar suma
+            const newValue = top1.value * 2;
             score += newValue;
-            DOM.scoreEl.textContent = score;
+            updateScoreUI();
+            
+            // Remover las dos cartas viejas e insertar la nueva
+            col.pop();
+            col.pop();
+            col.push({ value: newValue, state: 'merge' });
+            merged = true;
 
-            renderColumn(colIndex, true); // true = activa animación POP
+            render(); // Mostrar la carta naciente con animación de brillo
+            await sleep(300); // Pausa dramática para disfrutar el combo
 
-            // Especial: Si llega a 2048, limpia la columna completa
-            if (newValue === 2048) {
-                await sleep(400); 
-
-                const colContainer = document.getElementById(`col-content-${colIndex}`);
-                const cardDOM = colContainer.lastElementChild;
-                cardDOM.classList.add('animate-clear2048'); // Animación desvanecimiento
-
-                await sleep(600); 
-
-                columns[colIndex] = [];
-                renderColumn(colIndex);
-                break; 
+            // Condición 2048
+            if (newValue === TARGET_SCORE) {
+                col[col.length - 1].state = 'clear'; // Aplica animación de disolución
+                render();
+                await sleep(600); // Esperar que termine la animación
+                columns[colIndex] = []; // Vaciar memoria
+                render(); // Limpiar pantalla
+                merged = false; // Detener bucle
             }
+        }
+    }
+    
+    // Limpiar estados de animación residuales
+    col.forEach(c => c.state = 'idle');
+    render();
+}
+
+function checkGameOver() {
+    let isBoardFull = true;
+    for (let i = 0; i < 4; i++) {
+        const col = columns[i];
+        if (col.length < MAX_CARDS_PER_COL) {
+            isBoardFull = false;
+            break;
+        }
+        if (col.length >= MAX_CARDS_PER_COL && col[col.length - 1].value === currentCardValue) {
+             isBoardFull = false;
+             break;
+        }
+    }
+
+    if (isBoardFull) {
+        isGameOver = true;
+        document.getElementById('finalScore').innerText = score;
+        document.getElementById('gameOverModal').classList.remove('hidden');
+        document.getElementById('gameOverModal').classList.add('flex');
+    }
+}
+
+// Animación sutil de la puntuación al subir
+function updateScoreUI() {
+    const scoreEl = document.getElementById('scoreDisplay');
+    scoreEl.innerText = score;
+    scoreEl.classList.add('scale-125', 'text-white');
+    setTimeout(() => {
+        scoreEl.classList.remove('scale-125', 'text-white');
+    }, 200);
+}
+
+// --- NUEVO: Construcción de la carta usando la etiqueta <img> ---
+function createCardElement(cardObj) {
+    const wrapper = document.createElement('div');
+    
+    let classes = `w-full relative transition-transform flex justify-center`;
+    
+    // Asignar animaciones (El Juice)
+    if (cardObj.state === 'drop') classes += ' anim-drop';
+    if (cardObj.state === 'squash') classes += ' anim-squash';
+    if (cardObj.state === 'merge') classes += ' anim-merge';
+    if (cardObj.state === 'clear') classes += ' anim-clear';
+    
+    wrapper.className = classes;
+    
+    // Elemento de imagen
+    const img = document.createElement('img');
+    // Si el valor llega a 2048, usar carta11. Si se necesita limpiar (victoria), podemos alternar a carta12 para que brille.
+    img.src = CARD_IMAGES[cardObj.value] || (cardObj.state === 'clear' ? 'carta12.png' : 'carta11.png'); 
+    img.className = 'w-full h-auto rounded-lg shadow-md'; 
+    img.alt = `Carta ${cardObj.value}`;
+    
+    wrapper.appendChild(img);
+    return wrapper;
+}
+
+function render() {
+    if (!isGameOver) {
+        document.getElementById('scoreDisplay').innerText = score;
+    }
+
+    // Mazo
+    const currentCardContainer = document.getElementById('currentCardContainer');
+    currentCardContainer.innerHTML = '';
+    
+    const mazoImg = document.createElement('img');
+    mazoImg.src = CARD_IMAGES[currentCardValue];
+    mazoImg.className = `w-[80%] max-w-[80px] h-auto rounded-lg shadow-2xl`; // Dimensionado proporcional
+    mazoImg.alt = `Siguiente Carta ${currentCardValue}`;
+    currentCardContainer.appendChild(mazoImg);
+
+    // Tablero
+    for (let i = 0; i < 4; i++) {
+        const colContent = document.getElementById(`col-content-${i}`);
+        colContent.innerHTML = ''; 
+        
+        columns[i].forEach((cardObj, index) => {
+            const cardEl = createCardElement(cardObj);
+            
+            // --- NUEVO: Apilamiento visual (Efecto baraja de Solitario) ---
+            cardEl.style.position = 'absolute';
+            // Cada carta se desplaza 35px más arriba que la anterior
+            cardEl.style.bottom = `${index * 35}px`; 
+            cardEl.style.left = '0';
+            cardEl.style.width = '100%';
+            
+            // El z-index asegura que la carta nueva tape a la vieja
+            cardEl.style.zIndex = index + (cardObj.state === 'clear' ? 50 : 10);
+            
+            colContent.appendChild(cardEl);
+        });
+
+        // Peligro visual si está casi llena
+        const colZone = document.getElementById(`col-${i}`);
+        if (columns[i].length >= MAX_CARDS_PER_COL - 1) {
+            colZone.classList.add('border-red-500/50', 'bg-red-900/10');
         } else {
-            break; // No hay más fusiones
+            colZone.classList.remove('border-red-500/50', 'bg-red-900/10');
         }
     }
 }
 
-function triggerGameOver() {
-    isProcessing = true;
-    DOM.finalScoreEl.textContent = score;
-    
-    DOM.modal.classList.remove('opacity-0', 'pointer-events-none');
-    DOM.modal.classList.add('opacity-100', 'pointer-events-auto');
-    DOM.modalContent.classList.remove('scale-75');
-    DOM.modalContent.classList.add('scale-100');
-}
-
-// Arrancar el juego únicamente cuando la página haya cargado por completo
 window.onload = initGame;
