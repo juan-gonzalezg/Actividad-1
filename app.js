@@ -38,11 +38,11 @@ function initGame() {
 
 function generateNewCard() {
     const random = Math.random();
-    if (random < 0.5) currentCardValue = 2;
-    else if (random < 0.8) currentCardValue = 4;
-    else if (random < 0.95) currentCardValue = 8;
-    else if (random < 0.99) currentCardValue = 16;
-    else currentCardValue = 32;
+    if (random < 0.60) currentCardValue = 2;       // 60% probabilidad
+    else if (random < 0.85) currentCardValue = 4;  // 25% probabilidad
+    else if (random < 0.95) currentCardValue = 8;  // 10% probabilidad
+    else if (random < 0.99) currentCardValue = 16; // 4% probabilidad
+    else currentCardValue = 32;                    // 1% probabilidad
 }
 
 // Lógica Asíncrona Principal
@@ -180,7 +180,7 @@ function createCardElement(cardObj) {
     // Elemento de imagen
     const img = document.createElement('img');
     // Si el valor llega a 2048, usar carta11. Si se necesita limpiar (victoria), podemos alternar a carta12 para que brille.
-    img.src = CARD_IMAGES[cardObj.value] || (cardObj.state === 'clear' ? 'carta12.png' : 'carta11.png'); 
+    img.src = CARD_IMAGES[cardObj.value] || (cardObj.state === 'clear' ? 'cartas/carta12.png' : 'cartas/carta11.png'); 
     img.className = 'w-full h-auto rounded-lg shadow-md'; 
     img.alt = `Carta ${cardObj.value}`;
     
